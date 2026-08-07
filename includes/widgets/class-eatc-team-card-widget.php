@@ -1,0 +1,236 @@
+<?php
+/**
+ * Elementor Team Card widget class.
+ *
+ * @package Elementor_ACF_Team_Card
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+/**
+ * Team Card widget for Elementor.
+ *
+ * Extends Elementor's base widget class and provides one team-member card
+ * whose content is pulled from a chosen "Team Member" post's ACF fields.
+ */
+class EATC_Team_Card_Widget extends \Elementor\Widget_Base {
+
+	/**
+	 * Widget slug used internally by Elementor.
+	 */
+	public function get_name() {
+		return 'eatc_team_card';
+	}
+
+	/**
+	 * Human-readable title shown in the Elementor sidebar.
+	 */
+	public function get_title() {
+		return esc_html__( 'Team Card', 'elementor-acf-team-card' );
+	}
+
+	/**
+	 * Sidebar icon.
+	 */
+	public function get_icon() {
+		return 'eicon-person';
+	}
+
+	/**
+	 * Custom widget category.
+	 */
+	public function get_categories() {
+		return array( 'eatc-widgets' );
+	}
+
+	/**
+	 * Search keywords.
+	 */
+	public function get_keywords() {
+		return array( 'team', 'member', 'card', 'acf', 'person' );
+	}
+
+	/**
+	 * Style handles this widget depends on.
+	 * Elementor enqueues these automatically when the widget renders.
+	 */
+	public function get_style_depends() {
+		return array( 'eatc-team-card' );
+	}
+
+	/**
+	 * Script handles this widget depends on.
+	 */
+	public function get_script_depends() {
+		return array( 'eatc-team-card' );
+	}
+
+	/**
+	 * Register widget controls (the settings panel in Elementor's editor).
+	 */
+	protected function register_controls() {
+
+		// Content section: which team member to display.
+		$this->start_controls_section(
+			'content_section',
+			array(
+				'label' => esc_html__( 'Content', 'elementor-acf-team-card' ),
+				'tab'   => \Elementor\Controls_Manager::TAB_CONTENT,
+			)
+		);
+
+		$this->add_control(
+			'team_member_id',
+			array(
+				'label'       => esc_html__( 'Select Team Member', 'elementor-acf-team-card' ),
+				'type'        => \Elementor\Controls_Manager::SELECT,
+				'options'     => $this->get_team_member_options(),
+				'default'     => '',
+				'description' => esc_html__( 'Pick a team member. Create new ones under Team Members in wp-admin.', 'elementor-acf-team-card' ),
+			)
+		);
+
+		$this->add_control(
+			'show_bio',
+			array(
+				'label'        => esc_html__( 'Show Bio', 'elementor-acf-team-card' ),
+				'type'         => \Elementor\Controls_Manager::SWITCHER,
+				'label_on'     => esc_html__( 'Yes', 'elementor-acf-team-card' ),
+				'label_off'    => esc_html__( 'No', 'elementor-acf-team-card' ),
+				'return_value' => 'yes',
+				'default'      => 'yes',
+			)
+		);
+
+		$this->add_control(
+			'show_social',
+			array(
+				'label'        => esc_html__( 'Show Social Links', 'elementor-acf-team-card' ),
+				'type'         => \Elementor\Controls_Manager::SWITCHER,
+				'label_on'     => esc_html__( 'Yes', 'elementor-acf-team-card' ),
+				'label_off'    => esc_html__( 'No', 'elementor-acf-team-card' ),
+				'return_value' => 'yes',
+				'default'      => 'yes',
+			)
+		);
+
+		$this->end_controls_section();
+	}
+
+	/**
+	 * Build the dropdown options: a list of published Team Member posts.
+	 *
+	 * @return array<string,string> ID => Post title.
+	 */
+	private function get_team_member_options() {
+		$options = array( '' => esc_html__( 'Select a team member', 'elementor-acf-team-card' ) );
+
+		$posts = get_posts(
+			array(
+				'post_type'      => 'eatc_team_member',
+				'posts_per_page' => 100,
+				'orderby'        => 'title',
+				'order'          => 'ASC',
+				'post_status'    => 'publish',
+			)
+		);
+
+		foreach ( $posts as $post ) {
+			$options[ (string) $post->ID ] = $post->post_title;
+		}
+
+		return $options;
+	}
+
+	/**
+	 * Renders the widget on the frontend.
+	 */
+	protected function render() {
+		$settings = $this->get_settings_for_display();
+
+		$member_id = ! empty( $settings['team_member_id'] ) ? absint( $settings['team_member_id'] ) : 0;
+
+		if ( 0 === $member_id ) {
+			echo '<p class="eatc-team-card__empty">' . esc_html__( 'Please select a team member in the widget settings.', 'elementor-acf-team-card' ) . '</p>';
+			return;
+		}
+
+		$member = get_post( $member_id );
+		if ( ! $member || 'eatc_team_member' !== $member->post_type ) {
+			echo '<p class="eatc-team-card__empty">' . esc_html__( 'Selected team member no longer exists.', 'elementor-acf-team-card' ) . '</p>';
+			return;
+		}
+
+		// Pull ACF fields.
+		$role         = get_field( 'role', $member_id );
+		$bio          = get_field( 'bio', $member_id );
+		$linkedin_url = get_field( 'linkedin_url', $member_id );
+		$twitter_url  = get_field( 'twitter_url', $member_id );
+		$email        = get_field( 'email', $member_id );
+
+		// Featured image.
+		$photo_html = get_the_post_thumbnail(
+			$member_id,
+			'medium',
+			array( 'class' => 'eatc-team-card__photo' )
+		);
+
+		$show_bio    = 'yes' === $settings['show_bio'];
+		$show_social = 'yes' === $settings['show_social'];
+
+		?>
+		<article class="eatc-team-card">
+			<?php if ( $photo_html ) : ?>
+				<div class="eatc-team-card__photo-wrap">
+					<?php
+					// $photo_html is generated by WordPress core get_the_post_thumbnail() and is already safe.
+					echo $photo_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+					?>
+				</div>
+			<?php endif; ?>
+
+			<div class="eatc-team-card__body">
+				<h3 class="eatc-team-card__name"><?php echo esc_html( $member->post_title ); ?></h3>
+
+				<?php if ( ! empty( $role ) ) : ?>
+					<p class="eatc-team-card__role"><?php echo esc_html( $role ); ?></p>
+				<?php endif; ?>
+
+				<?php if ( $show_bio && ! empty( $bio ) ) : ?>
+					<div class="eatc-team-card__bio">
+						<?php echo wp_kses_post( wpautop( $bio ) ); ?>
+					</div>
+				<?php endif; ?>
+
+				<?php if ( $show_social && ( $linkedin_url || $twitter_url || $email ) ) : ?>
+					<ul class="eatc-team-card__social">
+						<?php if ( $linkedin_url ) : ?>
+							<li>
+								<a class="eatc-team-card__social-link" href="<?php echo esc_url( $linkedin_url ); ?>" target="_blank" rel="noopener noreferrer">
+									<?php esc_html_e( 'LinkedIn', 'elementor-acf-team-card' ); ?>
+								</a>
+							</li>
+						<?php endif; ?>
+						<?php if ( $twitter_url ) : ?>
+							<li>
+								<a class="eatc-team-card__social-link" href="<?php echo esc_url( $twitter_url ); ?>" target="_blank" rel="noopener noreferrer">
+									<?php esc_html_e( 'X / Twitter', 'elementor-acf-team-card' ); ?>
+								</a>
+							</li>
+						<?php endif; ?>
+						<?php if ( $email ) : ?>
+							<li>
+								<a class="eatc-team-card__social-link" href="<?php echo esc_url( 'mailto:' . $email ); ?>">
+									<?php esc_html_e( 'Email', 'elementor-acf-team-card' ); ?>
+								</a>
+							</li>
+						<?php endif; ?>
+					</ul>
+				<?php endif; ?>
+			</div>
+		</article>
+		<?php
+	}
+}
